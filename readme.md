@@ -3,3 +3,5 @@ Mrt-rg-rap-devex-dev-eus2-1
 
 
 Missing attribute value: Expected an attribute value, introduced by an equals sign ("=").Terraform
+Unbalanced parentheses: Expected a closing parenthesis to terminate the expression.Terraform
+
