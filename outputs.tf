@@ -1,24 +1,23 @@
-# the main one: EVERYTHING here
 output "resources" {
-  description = "First generated name for every known resource type. Use: module.naming.resources.<type>.name"
-  value       = local.first_names
+  description = "First generated name per resource type. Use: module.naming.resources.<type>.name"
+  value       = local.resources_first
 }
 
-# shortcuts if you want them
+# Shortcuts for common resources
 output "resource_group" {
-  value = local.first_names.resource_group
+  value = local.resources_first.resource_group
 }
 
 output "storage_account" {
-  value = local.first_names.storage_account
+  value = local.resources_first.storage_account
 }
 
 output "key_vault" {
-  value = local.first_names.key_vault
+  value = local.resources_first.key_vault
 }
 
 output "container_registry" {
-  value = local.first_names.container_registry
+  value = local.resources_first.container_registry
 }
 
 output "generated_names" {
@@ -28,4 +27,3 @@ output "generated_names" {
 output "tags" {
   value = local.tags
 }
-
