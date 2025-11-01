@@ -5,11 +5,11 @@ variable "lob_map" {
     banking                           = "bnk"
     technology_services_group         = "tsg"
     not_applicable                    = ""
-    mis_tech                          = "Mist"
+    mis_tech                          = "mist"
     cyber                             = "cyb"
     customer_operations_and_risk      = "cor"
     risk_management_solutions         = "rms"
-    environment_Social_and_Governance = "esg"
+    environment_social_and_governance = "esg"
     bureau_van_dijk                   = "bvd"
     know_your_customer                = "kyc"
     data_solutions_group              = "dsg"
@@ -36,6 +36,9 @@ variable "lob_map" {
     mrt_tools_management              = "tam"
     mrt_ratings                       = "rad"
     mrt_shared_business_accounts      = "sba"
+
+    # NEW
+    ratings_azure_patterns            = "rap"
   }
 }
 
@@ -79,10 +82,12 @@ variable "product_area" {
         "mrt_tools_management",
         "mrt_ratings",
         "mrt_shared_business_accounts",
+        "ratings_azure_patterns", # NEW
         ""],
         var.product_area
       )
     )
-    error_message = "Invalid 'product_area'. Must be one of the following values: insurance, banking, customer_operations_and_risk, technology_services_group, not_applicable, mis_tech, cyber, risk, environment_social_and_governance, bureau_van_dijk, know_your_customer, data_solutions_group, or consumer_product_group"
+    error_message = "Invalid 'product_area'. Must be one of the defined product areas (including 'ratings_azure_patterns')."
   }
 }
+
