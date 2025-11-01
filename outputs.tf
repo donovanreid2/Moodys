@@ -3,7 +3,7 @@ output "resources" {
   value       = local.resources_first
 }
 
-# Shortcuts for common resources
+# nice shortcuts if you want the shorter form
 output "resource_group" {
   value = local.resources_first.resource_group
 }
