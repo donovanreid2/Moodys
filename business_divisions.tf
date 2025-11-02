@@ -36,4 +36,3 @@ variable "business_division" {
     error_message = "Invalid 'business_division'. It must be one of: moodys_analytics, moodys_investor_services, moodys_shared_services, cloud_shared_services, moodys_rating_technology, css, ma, mis, mss, mrt."
   }
 }
-
