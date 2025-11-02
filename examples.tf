@@ -1,31 +1,20 @@
- Error: Invalid reference
-│
-│   on modules\naming\main.tf line 68, in locals:
-│   68:   shortdesc_chars     = split("", shortdesc_lower)
-│
-│ A reference to a resource type must be followed by at least one attribute access, specifying the resource name.  
-╵
-╷
-│ Error: Invalid reference
-│
-│   on modules\naming\main.tf line 69, in locals:
-│   69:   shortdesc_filtered  = [for c in shortdesc_chars : c if contains(local.allowed_chars, c)]
-│
-│ A reference to a resource type must be followed by at least one attribute access, specifying the resource name.  
-╵
-╷
-│ Error: Invalid reference
-│
-│   on modules\naming\main.tf line 70, in locals:
-│   70:   shortdesc_joined    = join("", shortdesc_filtered)
-│
-│ A reference to a resource type must be followed by at least one attribute access, specifying the resource name.  
-╵
-╷
-│ Error: Invalid reference
-│
-│   on modules\naming\main.tf line 72, in locals:
-│   72:   shortdesc           = substr(shortdesc_joined, 0, 20)
-│
-│ A reference to a resource type must be followed by at least one attribute access, specifying the resource name.  
-╵
+module "naming" {
+  source = "./modules/naming"
+
+  location          = "eastus2"
+  environment       = "dev"
+  organization      = "moodys"
+  business_division = "mrt"
+  product_area      = "ratings_azure_patterns"
+  shortdesc         = "devex"
+  cloud_provider    = "azure"
+
+  # ask the generator to make both RG and ACR
+  generator = {
+    app = {
+      resource_group     = 1
+      container_registry = 1
+    }
+  }
+}
+
