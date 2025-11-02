@@ -3,7 +3,7 @@ output "resources" {
   value       = local.resources_first
 }
 
-# nice shortcuts if you want the shorter form
+# optional shortcuts
 output "resource_group" {
   value = local.resources_first.resource_group
 }
@@ -27,3 +27,4 @@ output "generated_names" {
 output "tags" {
   value = local.tags
 }
+
