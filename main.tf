@@ -4,7 +4,7 @@ terraform {
 
 locals {
   # 1) built-in overrides for Azure resources with annoying rules
-  # these are the defaults; the user can still override with var.resource_name_overrides
+  # user can still override with var.resource_name_overrides (user wins)
   builtin_resource_overrides = {
     # storage: 3–24 chars, lowercase, no dashes
     storage_account = {
@@ -13,19 +13,16 @@ locals {
     }
 
     # key vault: 3–24, alphanum and dash, must start with letter
-    # we’ll keep dashes but cap at 24
     key_vault = {
       max_length    = 24
       strip_hyphens = false
     }
 
-    # ACR: 5–50, alphanum only, lowercase
+    # ACR: 5–50, alphanum only, lowercase, NO dashes
     container_registry = {
       max_length    = 50
       strip_hyphens = true
     }
-
-    # you can add more here later (public_ip, vnet, etc.)
   }
 
   # bring in all resource types (your big map from resources.tf + pseudo)
@@ -53,11 +50,12 @@ locals {
 
   # sanitize shortdesc
   shortdesc_raw   = lower(var.shortdesc)
-  shortdesc_step1 = replace(local.shortdesc_raw, " ", "-")
-  shortdesc_step2 = replace(local.shortdesc_step1, "_", "-")
+  shortdesc_step1 = regexreplace(local.shortdesc_raw, "[^a-z0-9-]", "")
+  shortdesc_step2 = regexreplace(local.shortdesc_step1, "-+", "-")
   shortdesc       = substr(local.shortdesc_step2, 0, 20)
 
-  # pseudo-resources
+  # pseudo-resources: allow "computer_name" to be asked for even if
+  # it's not in the normal resource_types map
   pseudo_resources_generator = {
     for domain, resources in var.generator :
     domain => {
@@ -72,53 +70,57 @@ locals {
     var.resource_name_overrides
   )
 
-  # generator config
+  # generator config: turn each requested resource into a config
   generator_config = {
     for domain, resources in var.generator :
     domain => {
       for type, count in merge(resources, local.pseudo_resources_generator[domain]) :
       type => {
-        count  = count
-        type   = type
-        base_name = (
-          lookup(local.effective_overrides, type, null) != null ? 
-          lookup(local.effective_overrides, type, null).strip_hyphens : 
-          false
-        ) ? replace(
-          replace(replace(replace(replace(replace(
-            lower(join("-", compact([
-              local.division_abbr,
-              local.all_resource_types[type].abbr,
-              local.lob_abbr,
-              local.shortdesc,
-              local.env_abbr,
-              local.location_abbr
-            ]))), " ", "-"), "_", "-"), ".", "-"), "/", "-"), "--", "-"), "-", ""
-        ) : replace(replace(replace(replace(replace(
-          lower(join("-", compact([
-            local.division_abbr,
-            local.all_resource_types[type].abbr,
-            local.lob_abbr,
-            local.shortdesc,
-            local.env_abbr,
-            local.location_abbr
-          ]))), " ", "-"), "_", "-"), ".", "-"), "/", "-"), "--", "-")
-        separator = (
-          lookup(local.effective_overrides, type, null) != null ? 
-          lookup(local.effective_overrides, type, null).strip_hyphens : 
-          false
-        ) ? "" : "-"
-        max_name_length = (
-          lookup(local.effective_overrides, type, null) != null ? 
-          lookup(local.effective_overrides, type, null).max_length : 
-          try(local.all_resource_types[type].max_name_length, -1)
-        )
-        index_format = try(local.all_resource_types[type].index_format, "%d")
+        # base meta
+        res_meta         = local.all_resource_types[type]
+        res_abbr         = local.all_resource_types[type].abbr
+        res_max_len_orig = try(local.all_resource_types[type].max_name_length, -1)
+        res_index_format = try(local.all_resource_types[type].index_format, "%d")
+
+        # pull override if we have it
+        override  = lookup(local.effective_overrides, type, null)
+        max_len   = override != null ? override.max_length : res_max_len_orig
+        strip_hy  = override != null ? override.strip_hyphens : false
+
+        # name parts per your spec:
+        # [business_division]-[resource_type]-[product_area]-[shortdesc]-[environment]-[region]
+        name_parts = compact([
+          local.division_abbr,
+          res_abbr,
+          local.lob_abbr,
+          local.shortdesc,
+          local.env_abbr,
+          local.location_abbr
+        ])
+
+        name_raw        = join("-", name_parts)
+        name_sanitized1 = lower(regexreplace(name_raw, "[^a-z0-9-]", ""))
+        name_sanitized2 = regexreplace(name_sanitized1, "-+", "-")
+
+        base_name = strip_hy ? replace(name_sanitized2, "-", "") : name_sanitized2
+        separator = strip_hy ? "" : "-"
+
+        {
+          count           = count
+          type            = type
+          base_name       = base_name
+          separator       = separator
+          max_name_length = max_len
+          index_format    = res_index_format
+        }
       }
     }
   }
 
   # final generated names
+  #
+  # NOTE: terraform doesn't let us declare intermediates *inside* the for,
+  # so we build the full string twice (once in substr, once in else)
   generated_names = {
     for domain, resources in local.generator_config :
     domain => {
@@ -127,12 +129,15 @@ locals {
         for index in range(1, cfg.count + 1) : (
           cfg.max_name_length > 0 ?
           substr(
-            cfg.separator == "" ?
-            "${cfg.base_name}${format(cfg.index_format, index)}" :
-            "${cfg.base_name}${cfg.separator}${format(cfg.index_format, index)}",
+            (
+              cfg.separator == "" ?
+              "${cfg.base_name}${format(cfg.index_format, index)}" :
+              "${cfg.base_name}${cfg.separator}${format(cfg.index_format, index)}"
+            ),
             0,
             cfg.max_name_length
-          ) :
+          )
+          :
           (
             cfg.separator == "" ?
             "${cfg.base_name}${format(cfg.index_format, index)}" :
@@ -143,7 +148,7 @@ locals {
     }
   }
 
-  # ----- helper: pick the *first* instance of a resource type across all domains -----
+  # collect candidate first instances for some common types
   resource_group_candidates = flatten([
     for domain, resources in local.generated_names :
     try([resources.resource_group[0]], [])
@@ -166,19 +171,22 @@ locals {
   first_key_vault_name          = try(local.key_vault_candidates[0], null)
   first_container_registry_name = try(local.container_registry_candidates[0], null)
 
-  # resources_first for outputs compatibility
+  # ---- build the map your outputs expect ----
+  all_generated_resource_types = distinct(flatten([
+    for domain, resources in local.generated_names :
+    keys(resources)
+  ]))
+
   resources_first = {
-    resource_group = {
-      name = local.first_resource_group_name
-    }
-    storage_account = {
-      name = local.first_storage_account_name
-    }
-    key_vault = {
-      name = local.first_key_vault_name
-    }
-    container_registry = {
-      name = local.first_container_registry_name
+    for rtype in local.all_generated_resource_types :
+    rtype => {
+      name = try(
+        element(flatten([
+          for domain, resources in local.generated_names :
+          try([resources[rtype][0]], [])
+        ]), 0),
+        null
+      )
     }
   }
 
