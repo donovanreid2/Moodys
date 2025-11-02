@@ -1,23 +1,31 @@
-
-│ Error: Invalid reference
+ Error: Invalid reference
 │
-│   on modules\naming\main.tf line 47, in locals:
-│   47:   shortdesc_clean_1 = replace(shortdesc_lower, "/[^a-z0-9-]/", "")
-│
-│ A reference to a resource type must be followed by at least one attribute access, specifying the resource name.  
-╵
-╷
-│ Error: Invalid reference
-│
-│   on modules\naming\main.tf line 48, in locals:
-│   48:   shortdesc_clean_2 = replace(shortdesc_clean_1, "/-+/", "-")
+│   on modules\naming\main.tf line 68, in locals:
+│   68:   shortdesc_chars     = split("", shortdesc_lower)
 │
 │ A reference to a resource type must be followed by at least one attribute access, specifying the resource name.  
 ╵
 ╷
 │ Error: Invalid reference
 │
-│   on modules\naming\main.tf line 49, in locals:
-│   49:   shortdesc         = substr(shortdesc_clean_2, 0, 20)
+│   on modules\naming\main.tf line 69, in locals:
+│   69:   shortdesc_filtered  = [for c in shortdesc_chars : c if contains(local.allowed_chars, c)]
 │
-│ A reference to a resource type must be followed by at least one attribute access, specifying the resource name.
+│ A reference to a resource type must be followed by at least one attribute access, specifying the resource name.  
+╵
+╷
+│ Error: Invalid reference
+│
+│   on modules\naming\main.tf line 70, in locals:
+│   70:   shortdesc_joined    = join("", shortdesc_filtered)
+│
+│ A reference to a resource type must be followed by at least one attribute access, specifying the resource name.  
+╵
+╷
+│ Error: Invalid reference
+│
+│   on modules\naming\main.tf line 72, in locals:
+│   72:   shortdesc           = substr(shortdesc_joined, 0, 20)
+│
+│ A reference to a resource type must be followed by at least one attribute access, specifying the resource name.  
+╵
