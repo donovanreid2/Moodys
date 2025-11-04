@@ -41,3 +41,20 @@ resource "azurerm_container_registry_task" "docker_build" {
 
   tags = { Purpose = "dockerfile-build", Service = "acr-task", Env = "dev" }
 }
+
+acr_task = {
+  agent_pool_name      = "acr-agent-pool"
+  platform_os          = "Linux"
+  dockerfile_path      = "Dockerfile"
+  context_path         = "https://github.com/yourorg/private-repo.git#main"
+  context_access_token = null
+  image_repo           = "myapp"
+  use_run_id_tag       = true
+  source_triggers = [
+    { name = "on-commit", events = ["commit"], branch = "main",
+      repository_url = "https://github.com/yourorg/private-repo.git", source_type = "Github",
+      authentication = { token = "ghp_xxx", token_type = "PAT" } }
+  ]
+  initial_run_now = true
+}
+
