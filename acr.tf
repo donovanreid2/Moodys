@@ -7,8 +7,8 @@ resource "azurerm_container_registry_task" "docker_build" {
 
   docker_step {
     dockerfile_path      = var.acr_task.dockerfile_path
-    context_path         = var.acr_task.context_path
-    context_access_token = var.acr_task.context_access_token
+    context_path         = var.acr_task.context_path          # git URL (with #branch) or "."
+    context_access_token = var.acr_task.context_access_token  # only if that git context is private
 
     image_names = var.acr_task.use_run_id_tag ? [
       "${var.acr_task.image_repo}:{{.Run.ID}}",
@@ -16,6 +16,7 @@ resource "azurerm_container_registry_task" "docker_build" {
     ] : ["${var.acr_task.image_repo}:latest"]
   }
 
+  # Source-triggered builds (commit/pullrequest)
   dynamic "source_trigger" {
     for_each = try(var.acr_task.source_triggers, [])
     content {
@@ -25,13 +26,28 @@ resource "azurerm_container_registry_task" "docker_build" {
       source_repository {
         repository_url      = source_trigger.value.repository_url
         branch              = source_trigger.value.branch
-        source_control_type = "Github"
-        source_control_authentication {
-          token = try(source_trigger.value.token, null)
+        source_control_type = "Github"  # Valid values include "Github" and "AzureRepos"
+
+        # <-- THIS is the correct auth block name & fields
+        dynamic "authentication" {
+          for_each = source_trigger.value.authentication != null ? [source_trigger.value.authentication] : []
+          content {
+            token             = authentication.value.token
+            token_type        = authentication.value.token_type  # e.g., "PAT"
+            expire_in_seconds = try(authentication.value.expire_in_seconds, null)
+            refresh_token     = try(authentication.value.refresh_token, null)
+            scope             = try(authentication.value.scope, null)
+          }
         }
       }
 
       enabled = coalesce(lookup(source_trigger.value, "enabled", null), true)
     }
+  }
+
+  tags = {
+    Purpose = "dockerfile-build"
+    Service = "acr-task"
+    Env     = "dev"
   }
 }
