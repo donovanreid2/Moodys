@@ -51,3 +51,9 @@ resource "azurerm_container_registry_task" "docker_build" {
     Env     = "dev"
   }
 }
+
+error:
+Required attribute "repository_url" not specified: An attribute named "repository_url" is required hereTerraform
+Required attribute "source_type" not specified: An attribute named "source_type" is required hereTerraform
+Unexpected block: Blocks of type "source_repository" are not expected hereTerraform
+: ()
