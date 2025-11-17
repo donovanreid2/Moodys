@@ -1,0 +1,13 @@
+services:
+  azurenamingtool:
+    build:
+      context: ../AzureNamingTool     # builds from the submodule
+    image: azurenamingtool:local
+    container_name: azurenamingtool
+    ports:
+      - "8081:80"                     # localhost:8081 -> container:80
+    volumes:
+      - azurenamingtool_settings:/app/settings  # persistent config
+
+volumes:
+  azurenamingtool_settings:
