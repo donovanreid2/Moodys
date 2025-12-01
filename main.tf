@@ -1,202 +1,42 @@
-terraform {
-  required_version = ">=0.13"
-}
+error:
+ Error: creating Key: keyvault.BaseClient#CreateKey: Failure responding to request: StatusCode=400 -- Original Error: autorest/azure: Service returned an error. Status=400 Code="BadParameter" Message="Property  has invalid value\r\n"
+│
+│   with azurerm_key_vault_key.postgresql_encryption_key,
+│   on kv_keys.tf line 171, in resource "azurerm_key_vault_key" "postgresql_encryption_key":
+│  171: resource "azurerm_key_vault_key" "postgresql_encryption_key" {
 
-locals {
-  # 1) built-in overrides for Azure resources with annoying rules
-  # user can still override with var.resource_name_overrides (user wins)
-  builtin_resource_overrides = {
-    # storage: 3–24 chars, lowercase, no dashes
-    storage_account = {
-      max_length    = 24
-      strip_hyphens = true
+code:
+
+# Create encryption key for PostgreSQL in Key Vault  
+resource "azurerm_key_vault_key" "postgresql_encryption_key" {
+  name         = "postgresql-encryption-key"
+  key_vault_id = azurerm_key_vault.regional_kv.id
+  key_type     = "RSA"
+  key_size     = 3072 # Standard size for PostgreSQL encryption
+
+  key_opts = [
+    "decrypt",
+    "encrypt",
+    "sign",
+    "unwrapKey",
+    "verify",
+    "wrapKey"
+  ]
+
+  rotation_policy {
+    automatic {
+      time_before_expiry = "P30D" # Rotate 30 days before expiry
     }
 
-    # key vault: 3–24, alphanum and dash, must start with letter
-    key_vault = {
-      max_length    = 24
-      strip_hyphens = false
-    }
-
-    # ACR: 5–50, alphanum only, lowercase, NO dashes
-    container_registry = {
-      max_length    = 50
-      strip_hyphens = true
-    }
+    expire_after         = "P365D" # 1 year expiry
+    notify_before_expiry = "P45D"  # Notify 45 days before expiry
   }
 
-  # bring in all resource types (your big map from resources.tf + pseudo)
-  all_resource_types = merge(
-    local.resource_types,
-    {
-      computer_name = {
-        name            = "computer_name"
-        alphanum        = true
-        global          = true
-        abbr            = ""
-        max_name_length = 13
-        index_format    = "%02d"
-      }
-    }
-  )
+  tags = merge(local.common_tags, {
+    Purpose = "PostgreSQL encryption at rest"
+  })
 
-  # abbreviations
-  location_abbr = lookup(var.location_map, var.location, "")
-  env_abbr      = lookup(var.environment_map, var.environment, "")
-  provider_abbr = lookup(var.cloud_provider_map, var.cloud_provider, "")
-  org_abbr      = lookup(var.organization_map, var.organization, "")
-  lob_abbr      = lookup(var.lob_map, var.product_area, "")
-  division_abbr = lookup(var.business_division_map, var.business_division, "")
-
-  # sanitize shortdesc
-  shortdesc_raw   = lower(var.shortdesc)
-  shortdesc_step1 = regexreplace(local.shortdesc_raw, "[^a-z0-9-]", "")
-  shortdesc_step2 = regexreplace(local.shortdesc_step1, "-+", "-")
-  shortdesc       = substr(local.shortdesc_step2, 0, 20)
-
-  # pseudo-resources: allow "computer_name" to be asked for even if
-  # it's not in the normal resource_types map
-  pseudo_resources_generator = {
-    for domain, resources in var.generator :
-    domain => {
-      for type, count in resources :
-      try(keys({ computer_name = {} }[type])[0], type) => count
-    }
-  }
-
-  # MERGE builtin overrides with user overrides (user wins)
-  effective_overrides = merge(
-    local.builtin_resource_overrides,
-    var.resource_name_overrides
-  )
-
-  # generator config: turn each requested resource into a config
-  generator_config = {
-    for domain, resources in var.generator :
-    domain => {
-      for type, count in merge(resources, local.pseudo_resources_generator[domain]) :
-      type => {
-        # base meta
-        res_meta         = local.all_resource_types[type]
-        res_abbr         = local.all_resource_types[type].abbr
-        res_max_len_orig = try(local.all_resource_types[type].max_name_length, -1)
-        res_index_format = try(local.all_resource_types[type].index_format, "%d")
-
-        # pull override if we have it
-        override  = lookup(local.effective_overrides, type, null)
-        max_len   = override != null ? override.max_length : res_max_len_orig
-        strip_hy  = override != null ? override.strip_hyphens : false
-
-        # name parts per your spec:
-        # [business_division]-[resource_type]-[product_area]-[shortdesc]-[environment]-[region]
-        name_parts = compact([
-          local.division_abbr,
-          res_abbr,
-          local.lob_abbr,
-          local.shortdesc,
-          local.env_abbr,
-          local.location_abbr
-        ])
-
-        name_raw        = join("-", name_parts)
-        name_sanitized1 = lower(regexreplace(name_raw, "[^a-z0-9-]", ""))
-        name_sanitized2 = regexreplace(name_sanitized1, "-+", "-")
-
-        base_name = strip_hy ? replace(name_sanitized2, "-", "") : name_sanitized2
-        separator = strip_hy ? "" : "-"
-
-        {
-          count           = count
-          type            = type
-          base_name       = base_name
-          separator       = separator
-          max_name_length = max_len
-          index_format    = res_index_format
-        }
-      }
-    }
-  }
-
-  # final generated names
-  #
-  # NOTE: terraform doesn't let us declare intermediates *inside* the for,
-  # so we build the full string twice (once in substr, once in else)
-  generated_names = {
-    for domain, resources in local.generator_config :
-    domain => {
-      for type, cfg in resources :
-      type => [
-        for index in range(1, cfg.count + 1) : (
-          cfg.max_name_length > 0 ?
-          substr(
-            (
-              cfg.separator == "" ?
-              "${cfg.base_name}${format(cfg.index_format, index)}" :
-              "${cfg.base_name}${cfg.separator}${format(cfg.index_format, index)}"
-            ),
-            0,
-            cfg.max_name_length
-          )
-          :
-          (
-            cfg.separator == "" ?
-            "${cfg.base_name}${format(cfg.index_format, index)}" :
-            "${cfg.base_name}${cfg.separator}${format(cfg.index_format, index)}"
-          )
-        )
-      ]
-    }
-  }
-
-  # collect candidate first instances for some common types
-  resource_group_candidates = flatten([
-    for domain, resources in local.generated_names :
-    try([resources.resource_group[0]], [])
-  ])
-  storage_account_candidates = flatten([
-    for domain, resources in local.generated_names :
-    try([resources.storage_account[0]], [])
-  ])
-  key_vault_candidates = flatten([
-    for domain, resources in local.generated_names :
-    try([resources.key_vault[0]], [])
-  ])
-  container_registry_candidates = flatten([
-    for domain, resources in local.generated_names :
-    try([resources.container_registry[0]], [])
-  ])
-
-  first_resource_group_name     = try(local.resource_group_candidates[0], null)
-  first_storage_account_name    = try(local.storage_account_candidates[0], null)
-  first_key_vault_name          = try(local.key_vault_candidates[0], null)
-  first_container_registry_name = try(local.container_registry_candidates[0], null)
-
-  # ---- build the map your outputs expect ----
-  all_generated_resource_types = distinct(flatten([
-    for domain, resources in local.generated_names :
-    keys(resources)
-  ]))
-
-  resources_first = {
-    for rtype in local.all_generated_resource_types :
-    rtype => {
-      name = try(
-        element(flatten([
-          for domain, resources in local.generated_names :
-          try([resources[rtype][0]], [])
-        ]), 0),
-        null
-      )
-    }
-  }
-
-  tags = {
-    provisioned_by       = var.provisioned_by
-    revenue              = var.revenue
-    app_id               = var.app_id
-    app_name             = var.app_name
-    app_tier             = var.app_tier
-    resource_group_owner = var.resource_group_owner
-    support_team         = var.support_team
-  }
+  depends_on = [
+    azurerm_key_vault.regional_kv
+  ]
 }
